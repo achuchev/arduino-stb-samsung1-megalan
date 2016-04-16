@@ -8,7 +8,6 @@
 
 #include <IRremote.h>
 
-#define DEBUG
 #define DEBUG_ENABLED_// Set to DEBUG to enable debug mode
 
 IRsend irsend;
