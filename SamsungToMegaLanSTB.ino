@@ -8,7 +8,7 @@
 
 #include <IRremote.h>
 
-#define DEBUG_ENABLED_// Set to DEBUG to enable debug mode
+#define DEBUG_ENABLED // Set to DEBUG to enable debug mode
 
 IRsend irsend;
 int RECV_PIN = 2; // From the TV send IR device
@@ -34,7 +34,7 @@ const unsigned long codeNecVolUp = 0xFF30CF;
 const unsigned long codeNecVolDown = 0xFF18E7;
 const unsigned long codeNecOk = 0xFF926D;
 const unsigned long codeNecBack = 0xFF32CD;
-const unsigned long codeNecPower = 0xFF02FD;
+const unsigned long codeNecPower = 0xFF02FD; // Requres to send codeNecDoNotRepeat
 const unsigned long codeNecKey0 = 0xFF00FF;
 const unsigned long codeNecKey1 = 0xFF807F;
 const unsigned long codeNecKey2 = 0xFF40BF;
@@ -45,6 +45,8 @@ const unsigned long codeNecKey6 = 0xFF609F;
 const unsigned long codeNecKey7 = 0xFFE01F;
 const unsigned long codeNecKey8 = 0xFF10EF;
 const unsigned long codeNecKey9 = 0xFF906F;
+const unsigned long codeNecDoNotRepeat = 0xFFFFFFFF;
+
 
 //////////// Codes Samsung 1+ provider
 const unsigned long  codeSamsungNavUp = 0x10EF50AF;
@@ -82,7 +84,9 @@ unsigned long invalidCode = 0xFFFFFF;
 void setup()
 {
   resetArray();
-  //Serial.begin(9600); // Enable Debug
+#ifdef DEBUG_ENABLED
+  Serial.begin(9600); // Enable Debug
+#endif
   irrecv.enableIRIn(); // Start the IR receiver
 }
 
@@ -248,7 +252,11 @@ void loop() {
           }
         case codeSamsungPower:
           {
+#ifdef DEBUG_ENABLED
+            Serial.println("Send Power ON/OFF");
+#endif
             sendMegaLanCode(codeNecPower);
+            sendMegaLanCode(codeNecDoNotRepeat);
             break;
           }
         case codeSamsungChannelList:
