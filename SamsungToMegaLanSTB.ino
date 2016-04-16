@@ -1,4 +1,15 @@
+/*
+   IRremote: IRsendDemo - demonstrates sending IR codes with IRsend
+   An IR LED must be connected to Arduino PWM pin 3.
+   Version 0.1 July, 2009
+   Copyright 2009 Ken Shirriff
+   http://arcfn.com
+*/
+
 #include <IRremote.h>
+
+#define DEBUG
+#define DEBUG_ENABLED_// Set to DEBUG to enable debug mode
 
 IRsend irsend;
 int RECV_PIN = 2; // From the TV send IR device
@@ -13,28 +24,28 @@ boolean stbStatusLastOn = false;
 
 //////////// Codes Set Top Box MegaLan
 // Navigation Controls
-const unsigned long codeNecNavUp = 0xFE7A85;
-const unsigned long codeNecNavDown = 0xFE6A95;
-const unsigned long codeNecNavRight = 0xFE1AE5;
-const unsigned long codeNecNavLeft = 0xFEDA25;
+const unsigned long codeNecNavUp = 0xFFE21D;
+const unsigned long codeNecNavDown = 0xFFD22D;
+const unsigned long codeNecNavRight = 0xFF52AD;
+const unsigned long codeNecNavLeft = 0xFF12ED;
 // Regular Buttons
-const unsigned long codeNecChannelUp = 0xFEF807;
-const unsigned long codeNecChannelDown = 0xFE3AC5;
-const unsigned long codeNecVolUp = 0xFE7887;
-const unsigned long codeNecVolDown = 0xFEFA05;
-const unsigned long codeNecEnter = 0xFE5AA5;
-const unsigned long codeNecC = 0xFE58A7;
-const unsigned long codeNecPower = 0xFE50AF; // Send it twice
-const unsigned long codeNecKey0 = 0xFEC03F;
-const unsigned long codeNecKey1 = 0xFE708F;
-const unsigned long codeNecKey2 = 0xFE609F;
-const unsigned long codeNecKey3 = 0xFEF00F;
-const unsigned long codeNecKey4 = 0xFE48B7;
-const unsigned long codeNecKey5 = 0xFEE01F;
-const unsigned long codeNecKey6 = 0xFEC837;
-const unsigned long codeNecKey7 = 0xFE6897;
-const unsigned long codeNecKey8 = 0xFE40BF;
-const unsigned long codeNecKey9 = 0xFEE817;
+const unsigned long codeNecChannelUp = 0xFFD02F;
+const unsigned long codeNecChannelDown = 0xFFA857;
+const unsigned long codeNecVolUp = 0xFF30CF;
+const unsigned long codeNecVolDown = 0xFF18E7;
+const unsigned long codeNecOk = 0xFF926D;
+const unsigned long codeNecBack = 0xFF32CD;
+const unsigned long codeNecPower = 0xFF02FD;
+const unsigned long codeNecKey0 = 0xFF00FF;
+const unsigned long codeNecKey1 = 0xFF807F;
+const unsigned long codeNecKey2 = 0xFF40BF;
+const unsigned long codeNecKey3 = 0xFFC03F;
+const unsigned long codeNecKey4 = 0xFF20DF;
+const unsigned long codeNecKey5 = 0xFFA05F;
+const unsigned long codeNecKey6 = 0xFF609F;
+const unsigned long codeNecKey7 = 0xFFE01F;
+const unsigned long codeNecKey8 = 0xFF10EF;
+const unsigned long codeNecKey9 = 0xFF906F;
 
 //////////// Codes Samsung 1+ provider
 const unsigned long  codeSamsungNavUp = 0x10EF50AF;
@@ -56,45 +67,25 @@ const unsigned long codeSamsungKey8 = 0x10EFE01F;
 const unsigned long codeSamsungKey9 = 0x10EF10EF;
 const unsigned long codeSamsungKeyPreCh = 0x10EFE817;
 
+//////////// Codes Samsung from Simple Remote Control
+const unsigned long codeSamsungSimpleRCKeyTools = 0xE0E0D22D;
+const unsigned long codeSamsungSimpleRCKeyDown = 0xE0E08679;
+const unsigned long codeSamsungSimpleRCOk = 0xE0E016E9;
+const unsigned long codeSamsungSimpleRCReturn = 0xE0E01AE5;
+
+// Key Combination Variables
+#define KEY_COMBINATION_COUNT 4
+int lastPressedKeysIndex = 0;
+unsigned long lastPressedKeys[KEY_COMBINATION_COUNT];
+unsigned long keyCombinationTVSleepTimer[KEY_COMBINATION_COUNT] = {codeSamsungNavLeft, codeSamsungNavRight, codeSamsungNavLeft, codeSamsungNavRight};
+unsigned long invalidCode = 0xFFFFFF;
+
 void setup()
 {
-  // Serial.begin(9600);
-  irrecv.enableIRIn(); // Start the receiver
+  resetArray();
+  //Serial.begin(9600); // Enable Debug
+  irrecv.enableIRIn(); // Start the IR receiver
 }
-
-#define STB_NUM_READS 100
-int readSTBStatusPin(){
-  // read multiple values and sort them to take the mode
-  int sortedValues[STB_NUM_READS];
-  for(int i=0;i<STB_NUM_READS;i++){
-    int value = analogRead(STB_ON_OFF_PIN);
-    int j;
-    if(value<sortedValues[0] || i==0){
-      j=0; //insert at first position
-    }
-    else{
-      for(j=1;j<i;j++){
-        if(sortedValues[j-1]<=value && sortedValues[j]>=value){
-          // j is insert position
-          break;
-        }
-      }
-    }
-    for(int k=i;k>j;k--){
-      // move all values higher than current reading up one position
-      sortedValues[k]=sortedValues[k-1];
-    }
-    sortedValues[j]=value; //insert current reading
-  }
-  //return scaled mode of 10 values
-  float returnval = 0;
-  for(int i=STB_NUM_READS/2-5;i<(STB_NUM_READS/2+5);i++){
-    returnval +=sortedValues[i];
-  }
-  returnval = returnval/10;
-  return returnval*1100/1023;
-}
-
 
 void software_Reset()
 // Restarts program from beginning but
@@ -103,153 +94,221 @@ void software_Reset()
   asm volatile ("  jmp 0");
 }
 
-void checkSTBStatus(){
-  // Check the voltage level on B/Pb cable on the STB
-  // above 2.5V(AVG = 612) means that the STB is OFF
-  // below 2.0V(AVG = 308) means that the STB is ON
+void sendMegaLanCode(unsigned long code, bool useNEC = true, int repeat = 1) {
+#ifdef DEBUG_ENABLED
+  Serial.print("Send IR Code: ");
 
-  int val = readSTBStatusPin();
-  // Serial.print(val);
-  // Serial.print(" ");
+  Serial.print(code, HEX);
+  Serial.print(" codeLen:");
+  Serial.print(codeLen, DEC);
+  Serial.print(" Type: ");
+#endif
 
-  if (val>=100){
-    // The STB is OFF but the TV(arduino) is started, so we have to start the STB
-    if (stbStatusLastOn==false){
-      // Send Power signal to STB
-      sendMegaLanCode(codeNecPower, 1);
-      stbStatusLastOn = true;
-      delay(10000);
-      // FIXME do not reset Arduino. For some reason if you turn on the TV the receiving of IR codes is blocked.
-      software_Reset();
+  for (int i = 0; i < repeat; i++) {
+    if (useNEC == true) {
+      irsend.sendNEC(code, codeLen);
+#ifdef DEBUG_ENABLED
+      Serial.println("NEC");
+#endif
+    } else {
+      irsend.sendSAMSUNG(code, codeLen);
+#ifdef DEBUG_ENABLED
+      Serial.println("Samsung");
+#endif
     }
-    // Serial.println("OFF");
   }
-  else{
-    // Serial.println("ON");
-  }
-  // Serial.println("EXIT");
+  delay(50); // Wait a bit between retransmissions
 }
-
-void sendMegaLanCode(unsigned long code, int repeat){
-  //  Serial.print("Send MegaLan codeValue=");
-  //  Serial.print(code, HEX);
-  //  Serial.print(" codeLen=");
-  //  Serial.println(codeLen, DEC);
-
-  for (int i=0; i<repeat; i++){
-    irsend.sendNEC(code, codeLen);
-    delay(50); // Wait a bit between retransmissions
-  }
-}
-
 
 void storeCode(decode_results *results) {
   // FIXME: No need to have this method, but first find out what actualy it does
   codeValueReceived = results->value;
 }
 
+bool compareArrays(unsigned long actualArray[], unsigned long expectedArray[], int n) {
+  for (int i = 0; i < n; i++) {
+    if (actualArray[i] != invalidCode) {
+      if (actualArray[i] != expectedArray[i]) {
+        resetArray();
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+  resetArray();
+  return true;
+}
+
+void resetArray() {
+  for (int i = 0; i < KEY_COMBINATION_COUNT; i++ ) {
+    lastPressedKeys[i] = invalidCode;
+  }
+  lastPressedKeysIndex = 0;
+}
+
+bool isKeyCombination(unsigned long code) {
+  lastPressedKeys[lastPressedKeysIndex] = code;
+  if (lastPressedKeysIndex == (KEY_COMBINATION_COUNT - 1)) {
+    lastPressedKeysIndex = 0;
+  } else {
+    lastPressedKeysIndex++;
+  }
+#ifdef DEBUG_ENABLED
+  Serial.println("Key Combination Start");
+#endif
+
+  // FIXME: For some reason the code below is needed, otherwise the program will not work:(
+  for (int i = 0; i < KEY_COMBINATION_COUNT; i++ ) {
+    //    unsigned long az = lastPressedKeys[i];
+    Serial.println(0xFFFFFF, HEX);
+  }
+
+#ifdef DEBUG_ENABLED
+  Serial.println("Key Combination End");
+#endif
+
+  bool isArrayEqual = compareArrays(lastPressedKeys, keyCombinationTVSleepTimer, KEY_COMBINATION_COUNT);
+  if (isArrayEqual == true) {
+    return true;
+  }
+  return false;
+}
+
+void sendTVSleepTimer() {
+#ifdef DEBUG_ENABLED
+  Serial.println("Sending Key Combination");
+#endif
+#define TIME_BETWEEN_TRANSMITTION 250
+
+  delay(TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyTools, false);
+
+  delay(TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
+
+  delay(TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
+
+  delay(TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
+
+  delay(TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCOk, false);
+
+  delay(TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
+
+  delay(TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
+
+  delay(TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCOk, false);
+
+  delay(TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCReturn, false);
+}
+
 void loop() {
-
-
-
   if (irrecv.decode(&results)) {
-    digitalWrite(STATUS_PIN, HIGH);
     storeCode(&results);
     irrecv.resume(); // resume receiver
-    digitalWrite(STATUS_PIN, LOW);
+#ifdef DEBUG_ENABLED
+    Serial.print("Received: ");
+    Serial.println(codeValueReceived, HEX);
+#endif
 
-    // Serial.print("Received: ");
-    // Serial.println(codeValueReceived, HEX);
-
-    switch (codeValueReceived) {
-    case codeSamsungNavUp:
-      {
-        sendMegaLanCode(codeNecNavUp, 2);
-        break;
-      }
-    case codeSamsungNavDown:
-      {
-        sendMegaLanCode(codeNecNavDown, 2);
-        break;
-      }
-    case codeSamsungNavLeft:
-      {
-        sendMegaLanCode(codeNecNavLeft, 1);
-        break;
-      }
-    case codeSamsungNavRight:
-      {
-        sendMegaLanCode(codeNecNavRight, 1);
-        break;
-      }
-    case codeSamsungNavEnter:
-      {
-        sendMegaLanCode(codeNecEnter, 1);
-        break;
-      }
-    case codeSamsungPower:
-      {
-        sendMegaLanCode(codeNecPower, 1);
-        break;
-      }
-    case codeSamsungChannelList:
-      {
-        sendMegaLanCode(codeNecC, 2);
-        break;
-      }
-    case codeSamsungKey0:
-      {
-        sendMegaLanCode(codeNecKey0, 1);
-        break;
-      }
-    case codeSamsungKey1:
-      {
-        sendMegaLanCode(codeNecKey1, 1);
-        break;
-      }
-    case codeSamsungKey2:
-      {
-        sendMegaLanCode(codeNecKey2, 1);
-        break;
-      }
-    case codeSamsungKey3:
-      {
-        sendMegaLanCode(codeNecKey3, 1);
-        break;
-      }
-    case codeSamsungKey4:
-      {
-        sendMegaLanCode(codeNecKey4, 1);
-        break;
-      }
-    case codeSamsungKey5:
-      {
-        sendMegaLanCode(codeNecKey5, 1);
-        break;
-      }
-    case codeSamsungKey6:
-      {
-        sendMegaLanCode(codeNecKey6, 1);
-        break;
-      }
-    case codeSamsungKey7:
-      {
-        sendMegaLanCode(codeNecKey7, 1);
-        break;
-      }
-    case codeSamsungKey8:
-      {
-        sendMegaLanCode(codeNecKey8, 1);
-        break;
-      }
-    case codeSamsungKey9:
-      {
-        sendMegaLanCode(codeNecKey9, 1);
-        break;
+    if (isKeyCombination(codeValueReceived) == true) {
+      sendTVSleepTimer();
+    } else {
+      switch (codeValueReceived) {
+        case codeSamsungNavUp:
+          {
+            sendMegaLanCode(codeNecNavUp);
+            break;
+          }
+        case codeSamsungNavDown:
+          {
+            sendMegaLanCode(codeNecNavDown);
+            break;
+          }
+        case codeSamsungNavLeft:
+          {
+            sendMegaLanCode(codeNecNavLeft);
+            break;
+          }
+        case codeSamsungNavRight:
+          {
+            sendMegaLanCode(codeNecNavRight);
+            break;
+          }
+        case codeSamsungNavEnter:
+          {
+            sendMegaLanCode(codeNecOk);
+            break;
+          }
+        case codeSamsungPower:
+          {
+            sendMegaLanCode(codeNecPower);
+            break;
+          }
+        case codeSamsungChannelList:
+          {
+            sendMegaLanCode(codeNecBack);
+            break;
+          }
+        case codeSamsungKey0:
+          {
+            sendMegaLanCode(codeNecKey0);
+            break;
+          }
+        case codeSamsungKey1:
+          {
+            sendMegaLanCode(codeNecKey1);
+            break;
+          }
+        case codeSamsungKey2:
+          {
+            sendMegaLanCode(codeNecKey2);
+            break;
+          }
+        case codeSamsungKey3:
+          {
+            sendMegaLanCode(codeNecKey3);
+            break;
+          }
+        case codeSamsungKey4:
+          {
+            sendMegaLanCode(codeNecKey4);
+            break;
+          }
+        case codeSamsungKey5:
+          {
+            sendMegaLanCode(codeNecKey5);
+            break;
+          }
+        case codeSamsungKey6:
+          {
+            sendMegaLanCode(codeNecKey6);
+            break;
+          }
+        case codeSamsungKey7:
+          {
+            sendMegaLanCode(codeNecKey7);
+            break;
+          }
+        case codeSamsungKey8:
+          {
+            sendMegaLanCode(codeNecKey8);
+            break;
+          }
+        case codeSamsungKey9:
+          {
+            sendMegaLanCode(codeNecKey9);
+            break;
+          }
       }
     }
     irrecv.enableIRIn();
   }
-
-  checkSTBStatus();
 }
