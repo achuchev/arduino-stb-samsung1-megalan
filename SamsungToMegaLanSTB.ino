@@ -8,7 +8,7 @@
 
 #include <IRremote.h>
 
-#define DEBUG_ENABLED // Set to DEBUG to enable debug mode
+#define DEBUG_ENABLED_ // Set to DEBUG_ENABLED to enable debug mode
 
 IRsend irsend;
 int RECV_PIN = 2; // From the TV send IR device
@@ -45,7 +45,7 @@ const unsigned long codeNecKey6 = 0xFF609F;
 const unsigned long codeNecKey7 = 0xFFE01F;
 const unsigned long codeNecKey8 = 0xFF10EF;
 const unsigned long codeNecKey9 = 0xFF906F;
-const unsigned long codeNecDoNotRepeat = 0xFFFFFFFF;
+const unsigned long codeNecSpecialRepeatSequence = 0xFFFFFFFF;
 
 
 //////////// Codes Samsung 1+ provider
@@ -79,6 +79,7 @@ const unsigned long codeSamsungSimpleRCReturn = 0xE0E01AE5;
 int lastPressedKeysIndex = 0;
 unsigned long lastPressedKeys[KEY_COMBINATION_COUNT];
 unsigned long keyCombinationTVSleepTimer[KEY_COMBINATION_COUNT] = {codeSamsungNavLeft, codeSamsungNavRight, codeSamsungNavLeft, codeSamsungNavRight};
+unsigned long keyCombinationSTBPowenOnOFF[KEY_COMBINATION_COUNT] = {codeSamsungNavRight, codeSamsungNavLeft, codeSamsungNavRight, codeSamsungNavLeft};
 unsigned long invalidCode = 0xFFFFFF;
 
 void setup()
@@ -128,18 +129,22 @@ void storeCode(decode_results *results) {
   codeValueReceived = results->value;
 }
 
-bool compareArrays(unsigned long actualArray[], unsigned long expectedArray[], int n) {
+bool compareArrays(unsigned long actualArray[], unsigned long expectedArray[], int n, bool &isSequance) {
   for (int i = 0; i < n; i++) {
     if (actualArray[i] != invalidCode) {
       if (actualArray[i] != expectedArray[i]) {
-        resetArray();
+        // invalid sequance
+        isSequance = false;
+        //resetArray();
         return false;
+      } else {
+        // not full, but valid sequance
       }
     } else {
       return false;
     }
   }
-  resetArray();
+  // the sequance is fully correct
   return true;
 }
 
@@ -163,31 +168,68 @@ bool isKeyCombination(unsigned long code) {
 
   // FIXME: For some reason the code below is needed, otherwise the program will not work:(
   for (int i = 0; i < KEY_COMBINATION_COUNT; i++ ) {
-    //    unsigned long az = lastPressedKeys[i];
-    Serial.println(0xFFFFFF, HEX);
+    Serial.println(lastPressedKeys[i], HEX);
   }
 
 #ifdef DEBUG_ENABLED
   Serial.println("Key Combination End");
 #endif
 
-  bool isArrayEqual = compareArrays(lastPressedKeys, keyCombinationTVSleepTimer, KEY_COMBINATION_COUNT);
-  if (isArrayEqual == true) {
-    return true;
+  //bool isArrayEqual = compareArrays(lastPressedKeys, keyCombinationTVSleepTimer, KEY_COMBINATION_COUNT);
+  bool isCombination = false;
+  bool isSequance = true;
+  bool isAnySequance = false;
+  if (compareArrays(lastPressedKeys, keyCombinationTVSleepTimer, KEY_COMBINATION_COUNT, isSequance)) {
+    sendTVSleepTimer();
+    isCombination = true;
   }
+  if (isSequance || isAnySequance) {
+    isAnySequance = true;
+  }
+  isSequance = true;
+  if (compareArrays(lastPressedKeys, keyCombinationSTBPowenOnOFF, KEY_COMBINATION_COUNT, isSequance)) {
+    sendSTBPowerOnOff();
+    isCombination = true;
+  }
+  if (isSequance || isAnySequance) {
+    isAnySequance = true;
+  }
+
+  if (isCombination || !isAnySequance) {
+    resetArray();
+  }
+
+#ifdef DEBUG_ENABLED
+  Serial.print("isCombination: ");
+  Serial.println(isCombination);
+  Serial.print("isAnySequance: ");
+  Serial.println(isAnySequance);
+
+  for (int i = 0; i < KEY_COMBINATION_COUNT; i++ ) {
+    Serial.println(lastPressedKeys[i], HEX);
+  }
+#endif
   return false;
+}
+
+void sendSTBPowerOnOff() {
+#ifdef DEBUG_ENABLED
+  Serial.println("Sending STB Power On Off Signal.");
+#endif
+  sendMegaLanCode(codeNecPower);
+  sendMegaLanCode(codeNecPower);
 }
 
 void sendTVSleepTimer() {
 #ifdef DEBUG_ENABLED
-  Serial.println("Sending Key Combination");
+  Serial.println("Sending sendTVSleepTimer Combination");
 #endif
-#define TIME_BETWEEN_TRANSMITTION 250
+#define TIME_BETWEEN_TRANSMITTION 500
 
   delay(TIME_BETWEEN_TRANSMITTION);
   sendMegaLanCode(codeSamsungSimpleRCKeyTools, false);
 
-  delay(TIME_BETWEEN_TRANSMITTION);
+  delay(1000);
   sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
 
   delay(TIME_BETWEEN_TRANSMITTION);
@@ -221,9 +263,7 @@ void loop() {
     Serial.println(codeValueReceived, HEX);
 #endif
 
-    if (isKeyCombination(codeValueReceived) == true) {
-      sendTVSleepTimer();
-    } else {
+    if (!isKeyCombination(codeValueReceived)) {
       switch (codeValueReceived) {
         case codeSamsungNavUp:
           {
@@ -252,11 +292,7 @@ void loop() {
           }
         case codeSamsungPower:
           {
-#ifdef DEBUG_ENABLED
-            Serial.println("Send Power ON/OFF");
-#endif
-            sendMegaLanCode(codeNecPower);
-            sendMegaLanCode(codeNecDoNotRepeat);
+            sendSTBPowerOnOff();
             break;
           }
         case codeSamsungChannelList:
