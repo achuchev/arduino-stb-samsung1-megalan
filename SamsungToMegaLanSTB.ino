@@ -77,6 +77,7 @@ const unsigned long codeSamsungSimpleRCReturn = 0xE0E01AE5;
 // Key Combination Variables
 #define KEY_COMBINATION_COUNT 4
 int lastPressedKeysIndex = 0;
+unsigned long timeOfTheLastPressedKeySequance = 0;
 unsigned long lastPressedKeys[KEY_COMBINATION_COUNT];
 unsigned long keyCombinationTVSleepTimer[KEY_COMBINATION_COUNT] = {codeSamsungNavLeft, codeSamsungNavRight, codeSamsungNavLeft, codeSamsungNavRight};
 unsigned long keyCombinationSTBPowenOnOFF[KEY_COMBINATION_COUNT] = {codeSamsungNavRight, codeSamsungNavLeft, codeSamsungNavRight, codeSamsungNavLeft};
@@ -84,7 +85,7 @@ unsigned long invalidCode = 0xFFFFFF;
 
 void setup()
 {
-  resetArray();
+  resetLastPassedKeysArray();
 #ifdef DEBUG_ENABLED
   Serial.begin(9600); // Enable Debug
 #endif
@@ -135,7 +136,7 @@ bool compareArrays(unsigned long actualArray[], unsigned long expectedArray[], i
       if (actualArray[i] != expectedArray[i]) {
         // invalid sequance
         isSequance = false;
-        //resetArray();
+        //resetLastPassedKeysArray();
         return false;
       } else {
         // not full, but valid sequance
@@ -148,7 +149,7 @@ bool compareArrays(unsigned long actualArray[], unsigned long expectedArray[], i
   return true;
 }
 
-void resetArray() {
+void resetLastPassedKeysArray() {
   for (int i = 0; i < KEY_COMBINATION_COUNT; i++ ) {
     lastPressedKeys[i] = invalidCode;
   }
@@ -156,6 +157,30 @@ void resetArray() {
 }
 
 bool isKeyCombination(unsigned long code) {
+  unsigned int  timeSinceLastSequanceKeyPressed = 0;
+  if (timeOfTheLastPressedKeySequance == 0) {
+    timeOfTheLastPressedKeySequance = millis();
+  }
+
+  timeSinceLastSequanceKeyPressed = millis()  - timeOfTheLastPressedKeySequance;
+
+#ifdef DEBUG_ENABLED
+  Serial.print("Milis since last key pressed: ");
+  Serial.println(timeSinceLastSequanceKeyPressed);
+#endif
+
+  if (timeSinceLastSequanceKeyPressed >= 5000) {
+    // Too much time since last sequance key was pressed
+#ifdef DEBUG_ENABLED
+    Serial.println("Too much time since last sequance key was pressed. Resetting the sequance.");
+#endif
+    timeOfTheLastPressedKeySequance = 0;
+    resetLastPassedKeysArray();
+  }
+  else {
+    timeOfTheLastPressedKeySequance = millis();
+  }
+
   lastPressedKeys[lastPressedKeysIndex] = code;
   if (lastPressedKeysIndex == (KEY_COMBINATION_COUNT - 1)) {
     lastPressedKeysIndex = 0;
@@ -163,19 +188,16 @@ bool isKeyCombination(unsigned long code) {
     lastPressedKeysIndex++;
   }
 #ifdef DEBUG_ENABLED
-  Serial.println("Key Combination Start");
+  Serial.println("lastPressedKeys Start");
 #endif
-
   // FIXME: For some reason the code below is needed, otherwise the program will not work:(
   for (int i = 0; i < KEY_COMBINATION_COUNT; i++ ) {
     Serial.println(lastPressedKeys[i], HEX);
   }
-
 #ifdef DEBUG_ENABLED
-  Serial.println("Key Combination End");
+  Serial.println("lastPressedKeys End");
 #endif
 
-  //bool isArrayEqual = compareArrays(lastPressedKeys, keyCombinationTVSleepTimer, KEY_COMBINATION_COUNT);
   bool isCombination = false;
   bool isSequance = true;
   bool isAnySequance = false;
@@ -196,8 +218,17 @@ bool isKeyCombination(unsigned long code) {
   }
 
   if (isCombination || !isAnySequance) {
-    resetArray();
+    resetLastPassedKeysArray();
   }
+
+
+
+
+
+  if (isCombination) {
+    return true;
+  }
+  return false;
 
 #ifdef DEBUG_ENABLED
   Serial.print("isCombination: ");
@@ -205,9 +236,11 @@ bool isKeyCombination(unsigned long code) {
   Serial.print("isAnySequance: ");
   Serial.println(isAnySequance);
 
+  Serial.println("lastPressedKeys Start");
   for (int i = 0; i < KEY_COMBINATION_COUNT; i++ ) {
     Serial.println(lastPressedKeys[i], HEX);
   }
+  Serial.println("lastPressedKeys End");
 #endif
   return false;
 }
