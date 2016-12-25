@@ -5,6 +5,7 @@
 #include <IRremote.h>
 
 #define DEBUG_ENABLED // Set to DEBUG_ENABLED to enable debug mode
+#define TIME_BETWEEN_TRANSMITTION 500
 
 IRsend irsend;
 int RECV_PIN = 2; // From the TV send IR device
@@ -99,15 +100,18 @@ void software_Reset()
   asm volatile ("  jmp 0");
 }
 
-void sendMegaLanCode(unsigned long code, bool useNEC = true, int repeat = 1) {
-#ifdef DEBUG_ENABLED
-  Serial.print("Send IR Code: ");
+void sendMegaLanCode(unsigned long code, bool useNEC = true, int delayBeforeTransmit = 0, int repeat = 1 ) {
 
+#ifdef DEBUG_ENABLED
+  Serial.print("Sleep: ");
+  Serial.print(delayBeforeTransmit, DEC);
+  Serial.print(" Send IR Code: ");
   Serial.print(code, HEX);
   Serial.print(" codeLen:");
   Serial.print(codeLen, DEC);
   Serial.print(" Type: ");
 #endif
+  delay(delayBeforeTransmit);
 
   for (int i = 0; i < repeat; i++) {
     if (useNEC == true) {
@@ -277,54 +281,28 @@ void sendTVSleepTimer(bool is60min) {
 #ifdef DEBUG_ENABLED
   Serial.println("Sending sendTVScreenOff Combination");
 #endif
-#define TIME_BETWEEN_TRANSMITTION 500
-
-  delay(TIME_BETWEEN_TRANSMITTION);
-  sendMegaLanCode(codeSamsungSimpleRCKeyTools, false);
-
-  delay(1000);
-  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
-
-  delay(TIME_BETWEEN_TRANSMITTION);
-  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
-
-  delay(TIME_BETWEEN_TRANSMITTION);
-  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
-
-  delay(TIME_BETWEEN_TRANSMITTION);
-  sendMegaLanCode(codeSamsungSimpleRCOk, false);
-
-  delay(TIME_BETWEEN_TRANSMITTION);
-  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
+  sendMegaLanCode(codeSamsungSimpleRCKeyTools, false, 1500);
+  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false, TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false, TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false, TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCOk, false, TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false, TIME_BETWEEN_TRANSMITTION);
 
   if (is60min == true) {
-    delay(TIME_BETWEEN_TRANSMITTION);
-    sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
+    sendMegaLanCode(codeSamsungSimpleRCKeyDown, false, TIME_BETWEEN_TRANSMITTION);
   }
-  delay(TIME_BETWEEN_TRANSMITTION);
-  sendMegaLanCode(codeSamsungSimpleRCOk, false);
-
-  delay(TIME_BETWEEN_TRANSMITTION);
-  sendMegaLanCode(codeSamsungSimpleRCReturn, false);
+  sendMegaLanCode(codeSamsungSimpleRCOk, false, TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCReturn, false, TIME_BETWEEN_TRANSMITTION);
 }
 
 void sendTVScreenOff() {
 #ifdef DEBUG_ENABLED
   Serial.println("Sending sendTVSleepTimer Combination");
 #endif
-#define TIME_BETWEEN_TRANSMITTION 500
-
-  delay(TIME_BETWEEN_TRANSMITTION);
-  sendMegaLanCode(codeSamsungSimpleRCKeyTools, false);
-
-  delay(1000);
-  sendMegaLanCode(codeSamsungSimpleRCKeyUp, false);
-
-  delay(TIME_BETWEEN_TRANSMITTION);
-  sendMegaLanCode(codeSamsungSimpleRCOk, false);
-
-  delay(TIME_BETWEEN_TRANSMITTION);
-  sendMegaLanCode(codeSamsungSimpleRCReturn, false);
+  sendMegaLanCode(codeSamsungSimpleRCKeyTools, false,  1500);
+  sendMegaLanCode(codeSamsungSimpleRCKeyUp, false, TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCOk, false, TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCReturn, false, TIME_BETWEEN_TRANSMITTION);
 }
 
 
@@ -336,7 +314,6 @@ void loop() {
     Serial.print("Received: ");
     Serial.println(codeValueReceived, HEX);
 #endif
-
     if (!isKeyCombination(codeValueReceived)) {
       switch (codeValueReceived) {
         case codeSamsungNavUp:
