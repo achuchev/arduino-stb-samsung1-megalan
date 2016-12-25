@@ -1,14 +1,10 @@
 /*
-   IRremote: IRsendDemo - demonstrates sending IR codes with IRsend
-   An IR LED must be connected to Arduino PWM pin 3.
-   Version 0.1 July, 2009
-   Copyright 2009 Ken Shirriff
-   http://arcfn.com
+  First You need to remove the build-in RobotIRremote library from /Applications/Arduino.app/Contents/Java/libraries
 */
 
 #include <IRremote.h>
 
-#define DEBUG_ENABLED_ // Set to DEBUG_ENABLED to enable debug mode
+#define DEBUG_ENABLED // Set to DEBUG_ENABLED to enable debug mode
 
 IRsend irsend;
 int RECV_PIN = 2; // From the TV send IR device
@@ -70,6 +66,7 @@ const unsigned long codeSamsungKeyPreCh = 0x10EFE817;
 
 //////////// Codes Samsung from Simple Remote Control
 const unsigned long codeSamsungSimpleRCKeyTools = 0xE0E0D22D;
+const unsigned long codeSamsungSimpleRCKeyUp = 0xE0E006F9;
 const unsigned long codeSamsungSimpleRCKeyDown = 0xE0E08679;
 const unsigned long codeSamsungSimpleRCOk = 0xE0E016E9;
 const unsigned long codeSamsungSimpleRCReturn = 0xE0E01AE5;
@@ -79,8 +76,11 @@ const unsigned long codeSamsungSimpleRCReturn = 0xE0E01AE5;
 int lastPressedKeysIndex = 0;
 unsigned long timeOfTheLastPressedKeySequance = 0;
 unsigned long lastPressedKeys[KEY_COMBINATION_COUNT];
-unsigned long keyCombinationTVSleepTimer[KEY_COMBINATION_COUNT] = {codeSamsungNavLeft, codeSamsungNavRight, codeSamsungNavLeft, codeSamsungNavRight};
+unsigned long keyCombinationTVSleepTimer60[KEY_COMBINATION_COUNT] = {codeSamsungNavLeft, codeSamsungNavRight, codeSamsungNavLeft, codeSamsungNavRight};
+unsigned long keyCombinationTVSleepTimer30[KEY_COMBINATION_COUNT] = {codeSamsungNavLeft, codeSamsungNavRight, codeSamsungNavLeft, codeSamsungNavLeft};
+unsigned long keyCombinationTVScreenOff[KEY_COMBINATION_COUNT] = {codeSamsungNavLeft, codeSamsungNavLeft, codeSamsungNavRight, codeSamsungNavRight};
 unsigned long keyCombinationSTBPowenOnOFF[KEY_COMBINATION_COUNT] = {codeSamsungNavRight, codeSamsungNavLeft, codeSamsungNavRight, codeSamsungNavLeft};
+
 unsigned long invalidCode = 0xFFFFFF;
 
 void setup()
@@ -199,15 +199,29 @@ bool isKeyCombination(unsigned long code) {
 #endif
 
   bool isCombination = false;
-  bool isSequance = true;
   bool isAnySequance = false;
-  if (compareArrays(lastPressedKeys, keyCombinationTVSleepTimer, KEY_COMBINATION_COUNT, isSequance)) {
-    sendTVSleepTimer();
+
+  // TV sleep timer 60 min
+  bool isSequance = true;
+  if (compareArrays(lastPressedKeys, keyCombinationTVSleepTimer60, KEY_COMBINATION_COUNT, isSequance)) {
+    sendTVSleepTimer(true);
     isCombination = true;
   }
   if (isSequance || isAnySequance) {
     isAnySequance = true;
   }
+
+  // TV sleep timer 30 min
+  isSequance = true;
+  if (compareArrays(lastPressedKeys, keyCombinationTVSleepTimer30, KEY_COMBINATION_COUNT, isSequance)) {
+    sendTVSleepTimer(false);
+    isCombination = true;
+  }
+  if (isSequance || isAnySequance) {
+    isAnySequance = true;
+  }
+
+  // STB on/off
   isSequance = true;
   if (compareArrays(lastPressedKeys, keyCombinationSTBPowenOnOFF, KEY_COMBINATION_COUNT, isSequance)) {
     sendSTBPowerOnOff();
@@ -217,13 +231,19 @@ bool isKeyCombination(unsigned long code) {
     isAnySequance = true;
   }
 
+  //TV Screen off
+  isSequance = true;
+  if (compareArrays(lastPressedKeys, keyCombinationTVScreenOff, KEY_COMBINATION_COUNT, isSequance)) {
+    sendTVScreenOff();
+    isCombination = true;
+  }
+  if (isSequance || isAnySequance) {
+    isAnySequance = true;
+  }
+
   if (isCombination || !isAnySequance) {
     resetLastPassedKeysArray();
   }
-
-
-
-
 
   if (isCombination) {
     return true;
@@ -253,9 +273,9 @@ void sendSTBPowerOnOff() {
   sendMegaLanCode(codeNecPower);
 }
 
-void sendTVSleepTimer() {
+void sendTVSleepTimer(bool is60min) {
 #ifdef DEBUG_ENABLED
-  Serial.println("Sending sendTVSleepTimer Combination");
+  Serial.println("Sending sendTVScreenOff Combination");
 #endif
 #define TIME_BETWEEN_TRANSMITTION 500
 
@@ -277,8 +297,28 @@ void sendTVSleepTimer() {
   delay(TIME_BETWEEN_TRANSMITTION);
   sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
 
+  if (is60min == true) {
+    delay(TIME_BETWEEN_TRANSMITTION);
+    sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
+  }
   delay(TIME_BETWEEN_TRANSMITTION);
-  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false);
+  sendMegaLanCode(codeSamsungSimpleRCOk, false);
+
+  delay(TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCReturn, false);
+}
+
+void sendTVScreenOff() {
+#ifdef DEBUG_ENABLED
+  Serial.println("Sending sendTVSleepTimer Combination");
+#endif
+#define TIME_BETWEEN_TRANSMITTION 500
+
+  delay(TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyTools, false);
+
+  delay(1000);
+  sendMegaLanCode(codeSamsungSimpleRCKeyUp, false);
 
   delay(TIME_BETWEEN_TRANSMITTION);
   sendMegaLanCode(codeSamsungSimpleRCOk, false);
@@ -286,6 +326,7 @@ void sendTVSleepTimer() {
   delay(TIME_BETWEEN_TRANSMITTION);
   sendMegaLanCode(codeSamsungSimpleRCReturn, false);
 }
+
 
 void loop() {
   if (irrecv.decode(&results)) {
