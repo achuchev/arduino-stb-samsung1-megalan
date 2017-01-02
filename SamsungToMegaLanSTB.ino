@@ -4,19 +4,16 @@
 
 #include <IRremote.h>
 
-#define DEBUG_ENABLED // Set to DEBUG_ENABLED to enable debug mode
+#define DEBUG_ENABLED_ // Set to DEBUG_ENABLED to enable debug mode
 #define TIME_BETWEEN_TRANSMITTION 500
 
 IRsend irsend;
 int RECV_PIN = 2; // From the TV send IR device
-int STATUS_PIN = 13; // For the LED
-int STB_ON_OFF_PIN = A0; // B/Pb cable on the STB
 decode_results results;
 IRrecv irrecv(RECV_PIN);
 
 unsigned long codeValueReceived; // The code value if not raw
 int codeLen = 32;
-boolean stbStatusLastOn = false;
 
 //////////// Codes Set Top Box MegaLan
 // Navigation Controls
@@ -44,9 +41,8 @@ const unsigned long codeNecKey8 = 0xFF10EF;
 const unsigned long codeNecKey9 = 0xFF906F;
 const unsigned long codeNecSpecialRepeatSequence = 0xFFFFFFFF;
 
-
 //////////// Codes Samsung 1+ provider
-const unsigned long  codeSamsungNavUp = 0x10EF50AF;
+const unsigned long codeSamsungNavUp = 0x10EF50AF;
 const unsigned long codeSamsungNavDown = 0x10EFD02F;
 const unsigned long codeSamsungNavLeft = 0x10EFB04F;
 const unsigned long codeSamsungNavRight = 0x10EF30CF;
@@ -84,24 +80,7 @@ unsigned long keyCombinationSTBPowenOnOFF[KEY_COMBINATION_COUNT] = {codeSamsungN
 
 unsigned long invalidCode = 0xFFFFFF;
 
-void setup()
-{
-  resetLastPassedKeysArray();
-#ifdef DEBUG_ENABLED
-  Serial.begin(9600); // Enable Debug
-#endif
-  irrecv.enableIRIn(); // Start the IR receiver
-}
-
-void software_Reset()
-// Restarts program from beginning but
-// does not reset the peripherals and registers
-{
-  asm volatile ("  jmp 0");
-}
-
 void sendMegaLanCode(unsigned long code, bool useNEC = true, int delayBeforeTransmit = 0, int repeat = 1 ) {
-
 #ifdef DEBUG_ENABLED
   Serial.print("Sleep: ");
   Serial.print(delayBeforeTransmit, DEC);
@@ -125,13 +104,19 @@ void sendMegaLanCode(unsigned long code, bool useNEC = true, int delayBeforeTran
       Serial.println("Samsung");
 #endif
     }
+    // Wait a bit between retransmissions
+    delay(50);
   }
-  delay(50); // Wait a bit between retransmissions
 }
 
 void storeCode(decode_results *results) {
   // FIXME: No need to have this method, but first find out what actualy it does
   codeValueReceived = results->value;
+  //ifdef DEBUG_ENABLE
+  // FIXME: For some reason the code below is needed, otherwise the program will not work:(
+  Serial.print("Received: ");
+  Serial.println(codeValueReceived, HEX);
+  //endif
 }
 
 bool compareArrays(unsigned long actualArray[], unsigned long expectedArray[], int n, bool &isSequance) {
@@ -207,7 +192,7 @@ bool isKeyCombination(unsigned long code) {
 
   // TV sleep timer 60 min
   bool isSequance = true;
-  if (compareArrays(lastPressedKeys, keyCombinationTVSleepTimer60, KEY_COMBINATION_COUNT, isSequance)) {
+  if (!isCombination && compareArrays(lastPressedKeys, keyCombinationTVSleepTimer60, KEY_COMBINATION_COUNT, isSequance)) {
     sendTVSleepTimer(true);
     isCombination = true;
   }
@@ -217,7 +202,7 @@ bool isKeyCombination(unsigned long code) {
 
   // TV sleep timer 30 min
   isSequance = true;
-  if (compareArrays(lastPressedKeys, keyCombinationTVSleepTimer30, KEY_COMBINATION_COUNT, isSequance)) {
+  if (!isCombination && compareArrays(lastPressedKeys, keyCombinationTVSleepTimer30, KEY_COMBINATION_COUNT, isSequance)) {
     sendTVSleepTimer(false);
     isCombination = true;
   }
@@ -227,7 +212,7 @@ bool isKeyCombination(unsigned long code) {
 
   // STB on/off
   isSequance = true;
-  if (compareArrays(lastPressedKeys, keyCombinationSTBPowenOnOFF, KEY_COMBINATION_COUNT, isSequance)) {
+  if (!isCombination && compareArrays(lastPressedKeys, keyCombinationSTBPowenOnOFF, KEY_COMBINATION_COUNT, isSequance)) {
     sendSTBPowerOnOff();
     isCombination = true;
   }
@@ -237,7 +222,7 @@ bool isKeyCombination(unsigned long code) {
 
   //TV Screen off
   isSequance = true;
-  if (compareArrays(lastPressedKeys, keyCombinationTVScreenOff, KEY_COMBINATION_COUNT, isSequance)) {
+  if (!isCombination && (compareArrays(lastPressedKeys, keyCombinationTVScreenOff, KEY_COMBINATION_COUNT, isSequance))) {
     sendTVScreenOff();
     isCombination = true;
   }
@@ -281,8 +266,8 @@ void sendTVSleepTimer(bool is60min) {
 #ifdef DEBUG_ENABLED
   Serial.println("Sending sendTVScreenOff Combination");
 #endif
-  sendMegaLanCode(codeSamsungSimpleRCKeyTools, false, 1500);
-  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false, TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyTools, false, TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyDown, false, 1000);
   sendMegaLanCode(codeSamsungSimpleRCKeyDown, false, TIME_BETWEEN_TRANSMITTION);
   sendMegaLanCode(codeSamsungSimpleRCKeyDown, false, TIME_BETWEEN_TRANSMITTION);
   sendMegaLanCode(codeSamsungSimpleRCOk, false, TIME_BETWEEN_TRANSMITTION);
@@ -299,21 +284,24 @@ void sendTVScreenOff() {
 #ifdef DEBUG_ENABLED
   Serial.println("Sending sendTVSleepTimer Combination");
 #endif
-  sendMegaLanCode(codeSamsungSimpleRCKeyTools, false,  1500);
-  sendMegaLanCode(codeSamsungSimpleRCKeyUp, false, TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyTools, false, TIME_BETWEEN_TRANSMITTION);
+  sendMegaLanCode(codeSamsungSimpleRCKeyUp, false, 1000);
   sendMegaLanCode(codeSamsungSimpleRCOk, false, TIME_BETWEEN_TRANSMITTION);
   sendMegaLanCode(codeSamsungSimpleRCReturn, false, TIME_BETWEEN_TRANSMITTION);
 }
 
+void setup()
+{
+  resetLastPassedKeysArray();
+  Serial.begin(9600);
+  // Start the IR receiver
+  irrecv.enableIRIn();
+}
 
 void loop() {
   if (irrecv.decode(&results)) {
     storeCode(&results);
-    irrecv.resume(); // resume receiver
-#ifdef DEBUG_ENABLED
-    Serial.print("Received: ");
-    Serial.println(codeValueReceived, HEX);
-#endif
+
     if (!isKeyCombination(codeValueReceived)) {
       switch (codeValueReceived) {
         case codeSamsungNavUp:
