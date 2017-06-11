@@ -4,7 +4,7 @@
 
 #include <IRremote.h>
 
-#define DEBUG_ENABLED_ // Set to DEBUG_ENABLED to enable debug mode
+#define _DEBUG_ENABLED // Set to DEBUG_ENABLED to enable debug mode
 #define TIME_BETWEEN_TRANSMITTION 500
 
 IRsend irsend;
@@ -294,6 +294,14 @@ void setup()
 {
   resetLastPassedKeysArray();
   Serial.begin(9600);
+
+#ifdef DEBUG_ENABLED
+  Serial.println("Sending Initial Back");
+#endif
+  // Sleeping for a while to allow the TV menu to show
+  delay(1500);
+  sendMegaLanCode(codeNecBack);
+
   // Start the IR receiver
   irrecv.enableIRIn();
 }
